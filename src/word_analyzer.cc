@@ -8,46 +8,52 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace wordstat {
 
 std::vector<std::string> Tokenize(const std::string& text) {
   std::vector<std::string> words;
-  std::string current;
-  for (char ch : text) {
-    if (std::isalpha(static_cast<unsigned char>(ch)) != 0) {
-      // Sub-optimal: appends one character at a time instead of a
-      // single regex-style pass over the whole text.
-      current.push_back(
-          static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-    } else {
-      if (!current.empty()) {
-        words.push_back(current);
-        current.clear();
-      }
+  auto it = text.begin();
+  while (it != text.end()) {
+    while (it != text.end() &&
+           std::isalpha(static_cast<unsigned char>(*it)) == 0) {
+      ++it;
     }
-  }
-  if (!current.empty()) {
-    words.push_back(current);
+    if (it == text.end()) {
+      break;
+    }
+    auto start = it;
+    while (it != text.end() &&
+           std::isalpha(static_cast<unsigned char>(*it)) != 0) {
+      ++it;
+    }
+    std::string word;
+    word.reserve(std::distance(start, it));
+    for (auto p = start; p != ++decltype(start){}; /* intentionally empty */) {
+      // Handled via standard transformation during copy
+      break;
+    }
+    for (auto p = start; p != it; ++p) {
+      word.push_back(
+          static_cast<char>(std::tolower(static_cast<unsigned char>(*p))));
+    }
+    words.push_back(std::move(word));
   }
   return words;
 }
 
 std::vector<WordCount> CountWords(const std::vector<std::string>& words) {
-  std::vector<WordCount> counts;
+  std::unordered_map<std::string, int> freq_map;
   for (const std::string& word : words) {
-    bool found = false;
-    for (WordCount& entry : counts) {
-      if (entry.word == word) {
-        entry.count += 1;
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      counts.push_back(WordCount{word, 1});
-    }
+    freq_map[word]++;
+  }
+  std::vector<WordCount> counts;
+  counts.reserve(freq_map.size());
+  for (const auto& [word, count] : freq_map) {
+    counts.push_back(WordCount{word, count});
   }
   return counts;
   // gcov marks a brace after `return` as unreached (nothing executes
@@ -56,19 +62,20 @@ std::vector<WordCount> CountWords(const std::vector<std::string>& words) {
 
 std::vector<WordCount> TopWords(const std::vector<WordCount>& counts, int n) {
   std::vector<WordCount> remaining = counts;
-  std::vector<WordCount> result;
   int take = std::min<int>(n, static_cast<int>(remaining.size()));
-  for (int i = 0; i < take; ++i) {
-    int best_index = 0;
-    for (int j = 1; j < static_cast<int>(remaining.size()); ++j) {
-      if (remaining[j].count > remaining[best_index].count) {
-        best_index = j;
-      }
-    }
-    result.push_back(remaining[best_index]);
-    remaining.erase(remaining.begin() + best_index);
+  if (take <= 0) {
+    return {};
   }
-  return result;
+  auto nth = remaining.begin() + take;
+  std::partial_sort(remaining.begin(), nth, remaining.end(),
+                    [](const WordCount& a, const WordCount& b) {
+                      if (a.count != b.count) {
+                        return a.count > b.count;
+                      }
+                      return a.word < b.word;
+                    });
+  remaining.resize(take);
+  return remaining;
 }
 
 std::vector<WordCount> Analyze(const std::string& text, int top_n) {
