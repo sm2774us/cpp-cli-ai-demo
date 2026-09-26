@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  # branches: ['**'] matches every branch (including your own feature
+  # branches) but not tags -- a bare `push:` with no filter also fires
+  # on the tags changelog-release.yml creates, which would be a
+  # redundant, pointless CI run on every release.
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain (GCC 14 for real -std=c++26 support, lcov, cpplint)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 cmake lcov clang-format
+          pip3 install --break-system-packages cpplint
+
+      - name: Format check (Google C++ style via clang-format)
+        run: |
+          clang-format --style=Google --dry-run --Werror \
+            include/wordstat/*.h src/*.cc tests/*.cc
+
+      - name: Style check (Google C++ Style Guide via cpplint)
+        run: |
+          cpplint --root=include include/wordstat/*.h
+          cpplint src/*.cc tests/*.cc
+
+      - name: Build + test with 100% line coverage gate
+        env:
+          CXX_COMPILER: g++-14
+          C_COMPILER: gcc-14
+          GCOV_TOOL: gcov-14
+        run: bash scripts/check_coverage.sh build
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov-report
+          path: build/coverage.filtered.info
+          if-no-files-found: warn

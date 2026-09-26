@@ -1,0 +1,9 @@
+build/
+*.o
+*.gcda
+*.gcno
+*.info
+coverage_html/
+before.txt
+after.txt
+ai_improve_log.txt
